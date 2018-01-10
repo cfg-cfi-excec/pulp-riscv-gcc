@@ -56,6 +56,7 @@ extern bool riscv_split_64bit_move_p (rtx, rtx);
 extern void riscv_split_doubleword_move (rtx, rtx);
 extern const char *riscv_output_move (rtx, rtx);
 extern const char *riscv_output_gpr_save (unsigned);
+extern const char *riscv_output_return ();
 extern const char *riscv_explicit_load_store(rtx AddrReg, rtx SrcReg, unsigned int Address, int IsLoad);
 
 #ifdef RTX_CODE

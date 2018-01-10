@@ -193,6 +193,9 @@ struct GTY(())  machine_function {
   /* Memoized return value of leaf_function_p.  <0 if false, >0 if true.  */
   int is_leaf;
 
+  /* True if current function is a naked function.  */
+  bool naked_p;
+
   /* The current frame information, calculated by riscv_compute_frame_info.  */
   struct riscv_frame_info frame;
 
@@ -345,6 +348,8 @@ static const struct riscv_tune_info optimize_size_tune_info = {
   2,						/* memory_cost */
   false,					/* slow_unaligned_access */
 };
+
+static tree riscv_handle_fndecl_attribute (tree *, tree, tree, int, bool *);
 
 /* A table describing all the processors GCC knows about.  */
 static const struct riscv_cpu_info riscv_cpu_info_table[] = {
@@ -2094,6 +2099,16 @@ riscv_output_move (rtx dest, rtx src)
     }
   gcc_unreachable ();
 }
+
+const char *
+riscv_output_return ()
+{
+  if (cfun->machine->naked_p)
+    return "";
+
+  return "ret";
+}
+
 
 /* Return true if CMP1 is a suitable second operand for integer ordering
    test CODE.  See also the *sCC patterns in riscv.md.  */
@@ -3341,6 +3356,50 @@ riscv_setup_incoming_varargs (cumulative_args_t cum, enum machine_mode mode,
     cfun->machine->varargs_size = gp_saved * UNITS_PER_WORD;
 }
 
+/* Handle an attribute requiring a FUNCTION_DECL;
+   arguments as in struct attribute_spec.handler.  */
+static tree
+riscv_handle_fndecl_attribute (tree *node, tree name,
+			       tree args ATTRIBUTE_UNUSED,
+			       int flags ATTRIBUTE_UNUSED, bool *no_add_attrs)
+{
+  if (TREE_CODE (*node) != FUNCTION_DECL)
+    {
+      warning (OPT_Wattributes, "%qE attribute only applies to functions",
+	       name);
+      *no_add_attrs = true;
+    }
+
+  return NULL_TREE;
+}
+
+/* Return true if func is a naked function.  */
+static bool
+riscv_naked_function_p (tree func)
+{
+  tree func_decl = func;
+  if (func == NULL_TREE)
+    func_decl = current_function_decl;
+  return NULL_TREE != lookup_attribute ("naked", DECL_ATTRIBUTES (func_decl));
+}
+
+/* Implement TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS.  */
+static bool
+riscv_allocate_stack_slots_for_args ()
+{
+  /* Naked functions should not allocate stack slots for arguments.  */
+  return !riscv_naked_function_p (current_function_decl);
+}
+
+/* Implement TARGET_WARN_FUNC_RETURN.  */
+static bool
+riscv_warn_func_return (tree decl)
+{
+  /* Naked functions are implemented entirely in assembly, including the
+     return sequence, so suppress warnings about this.  */
+  return !riscv_naked_function_p (decl);
+}
+
 /* Implement TARGET_EXPAND_BUILTIN_VA_START.  */
 
 static void
@@ -3503,7 +3562,7 @@ riscv_expand_block_move (rtx dest, rtx src, rtx length)
 
 static const struct attribute_spec riscv_attribute_table[] =
 {
-  /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler } */
+  /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler, type_id } */
   { "interrupt",      0, 0, false, true,  true,  NULL, true  },
   { "Uinterrupt",     0, 0, false, true,  true,  NULL, true  },
   { "Sinterrupt",     0, 0, false, true,  true,  NULL, true  },
@@ -3514,6 +3573,8 @@ static const struct attribute_spec riscv_attribute_table[] =
   { "import_var",     0, 0, true,  false, false, NULL, true  },
   { "export",         0, 0, false, true,  true,  NULL, true  },
   { "export_var",     0, 0, true,  false, false, NULL, true  },
+  /* The attribute telling no prologue/epilogue.  */
+  { "naked",          0, 0, true,  false, false, riscv_handle_fndecl_attribute, true },
   { NULL,             0, 0, false, false, false, NULL, false }
 };
 
@@ -4022,44 +4083,47 @@ riscv_compute_frame_info (void)
   if (Trace) fprintf(stderr, "- %30s ----FRAME INFOS---------------------\n", current_function_name());
 
   if (Trace) fprintf(stderr, "Setting up frame info, is_it: %s (%X)\n", frame->is_it?"Yes":"No", frame->is_it);
-  /* Find out which GPRs we need to save.  */
-  for (regno = GP_REG_FIRST; regno <= GP_REG_LAST; regno++)
-    if (riscv_save_reg_p (regno, frame->is_it)) {
-      frame->mask |= 1 << (regno - GP_REG_FIRST), num_x_saved++;
-      if (Trace)
-                fprintf(stderr, "\tGGGr%3d [%5s]: Lives:%3s, Call Used: %3s, Call Really Used:%3s, Invalidated:%3s, Def Cnt=%3d\n",
-                                regno, reg_names[regno], df_regs_ever_live_p(regno)?"Yes":"No", call_used_regs[regno]?"Yes":"No",
-                                call_really_used_regs[regno]?"Yes":"No",
-                                TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)?"Yes":"No",
-                                scan_reg_definitions(regno));
-    }
+  if (!cfun->machine->naked_p)
+    {
+      /* Find out which GPRs we need to save.  */
+      for (regno = GP_REG_FIRST; regno <= GP_REG_LAST; regno++)
+        if (riscv_save_reg_p (regno, frame->is_it)) {
+          frame->mask |= 1 << (regno - GP_REG_FIRST), num_x_saved++;
+          if (Trace)
+                    fprintf(stderr, "\tGGGr%3d [%5s]: Lives:%3s, Call Used: %3s, Call Really Used:%3s, Invalidated:%3s, Def Cnt=%3d\n",
+                                    regno, reg_names[regno], df_regs_ever_live_p(regno)?"Yes":"No", call_used_regs[regno]?"Yes":"No",
+                                    call_really_used_regs[regno]?"Yes":"No",
+                                    TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)?"Yes":"No",
+                                    scan_reg_definitions(regno));
+        }
 
-  /* If this function calls eh_return, we must also save and restore the
-     EH data registers.  */
-  if (crtl->calls_eh_return)
-    for (i = 0; (regno = EH_RETURN_DATA_REGNO (i)) != INVALID_REGNUM; i++) {
-      frame->mask |= 1 << (regno - GP_REG_FIRST), num_x_saved++;
-      if (Trace)
-                fprintf(stderr, "\tHHHr%3d [%5s]: Lives:%3s, Call Used: %3s, Call Really Used:%3s, Invalidated:%3s, Def Cnt=%3d\n",
-                                regno, reg_names[regno], df_regs_ever_live_p(regno)?"Yes":"No", call_used_regs[regno]?"Yes":"No",
-                                call_really_used_regs[regno]?"Yes":"No",
-                                TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)?"Yes":"No",
-                                scan_reg_definitions(regno));
-    }
+      /* If this function calls eh_return, we must also save and restore the
+         EH data registers.  */
+      if (crtl->calls_eh_return)
+        for (i = 0; (regno = EH_RETURN_DATA_REGNO (i)) != INVALID_REGNUM; i++) {
+          frame->mask |= 1 << (regno - GP_REG_FIRST), num_x_saved++;
+          if (Trace)
+                    fprintf(stderr, "\tHHHr%3d [%5s]: Lives:%3s, Call Used: %3s, Call Really Used:%3s, Invalidated:%3s, Def Cnt=%3d\n",
+                                    regno, reg_names[regno], df_regs_ever_live_p(regno)?"Yes":"No", call_used_regs[regno]?"Yes":"No",
+                                    call_really_used_regs[regno]?"Yes":"No",
+                                    TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)?"Yes":"No",
+                                    scan_reg_definitions(regno));
+        }
 
-  /* Find out which FPRs we need to save.  This loop must iterate over
-     the same space as its companion in riscv_for_each_saved_reg.  */
-  if (TARGET_HARD_FLOAT &&!TARGET_FPREGS_ON_GRREGS)
-    for (regno = FP_REG_FIRST; regno <= FP_REG_LAST; regno++)
-      if (riscv_save_reg_p (regno, frame->is_it)) {
-	frame->fmask |= 1 << (regno - FP_REG_FIRST), num_f_saved++;
-      if (Trace)
-                fprintf(stderr, "\tFFFr%3d [%5s]: Lives:%3s, Call Used: %3s, Call Really Used:%3s, Invalidated:%3s, Def Cnt=%3d\n",
-                                regno, reg_names[regno], df_regs_ever_live_p(regno)?"Yes":"No", call_used_regs[regno]?"Yes":"No",
-                                call_really_used_regs[regno]?"Yes":"No",
-                                TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)?"Yes":"No",
-                                scan_reg_definitions(regno));
-      }
+      /* Find out which FPRs we need to save.  This loop must iterate over
+         the same space as its companion in riscv_for_each_saved_reg.  */
+      if (TARGET_HARD_FLOAT &&!TARGET_FPREGS_ON_GRREGS)
+        for (regno = FP_REG_FIRST; regno <= FP_REG_LAST; regno++)
+          if (riscv_save_reg_p (regno, frame->is_it)) {
+	    frame->fmask |= 1 << (regno - FP_REG_FIRST), num_f_saved++;
+          if (Trace)
+                    fprintf(stderr, "\tFFFr%3d [%5s]: Lives:%3s, Call Used: %3s, Call Really Used:%3s, Invalidated:%3s, Def Cnt=%3d\n",
+                                    regno, reg_names[regno], df_regs_ever_live_p(regno)?"Yes":"No", call_used_regs[regno]?"Yes":"No",
+                                    call_really_used_regs[regno]?"Yes":"No",
+                                    TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)?"Yes":"No",
+                                    scan_reg_definitions(regno));
+          }
+    }
 
   /* At the bottom of the frame are any outgoing stack arguments. */
   offset = crtl->outgoing_args_size;
@@ -4400,6 +4464,14 @@ riscv_expand_prologue (void)
         fprintf(stderr, "Total Frame Size = %d\n", (int) size);
   }
 
+  if (cfun->machine->naked_p)
+    {
+      if (flag_stack_usage_info)
+	current_function_static_stack_size = 0;
+
+      return;
+    }
+
   if (flag_stack_usage_info)
     current_function_static_stack_size = size;
 
@@ -4583,7 +4655,8 @@ riscv_set_current_function (tree decl)
         	for (i=1; i<32; i++) if (call_used_regs[i]) fprintf(stderr, " %d", i);
 		fprintf(stderr, "\n");
 	}
-	
+
+	cfun->machine->naked_p = riscv_naked_function_p (decl);
 }
 
 
@@ -4621,15 +4694,14 @@ riscv_expand_epilogue (bool sibcall_p)
   bool need_barrier_p = (get_frame_size ()
 			 + cfun->machine->frame.arg_pointer_offset) != 0;
 
-  if (cfun->machine->is_interrupt) {
-        if (cfun->machine->has_hardware_loops) {
-                error ("interrupt function contains hardware loop: %s", current_function_name());
-        }
-        cfun->machine->contains_call = (!TARGET_MASK_NOHWLOOP && riscv_current_func_contains_call());
-        if (cfun->machine->contains_call) {
-                error ("interrupt function contains function calls: %s", current_function_name());
-        }
-  }
+  if (cfun->machine->naked_p)
+    {
+      gcc_assert (!sibcall_p);
+
+      emit_jump_insn (gen_return ());
+
+      return;
+    }
 
   if (!sibcall_p && riscv_can_use_return_insn ())
     {
@@ -5290,6 +5362,14 @@ riscv_function_ok_for_sibcall (tree decl ATTRIBUTE_UNUSED,
   /* When optimzing for size, don't use sibcalls in non-leaf routines */
   if (TARGET_SAVE_RESTORE)
     return riscv_leaf_function_p ();
+
+  /* Don't use sibcall for naked function.  */
+  if (cfun->machine->naked_p)
+    return false;
+
+  /* Don't use sibcall for naked function.  */
+  if (cfun->machine->naked_p)
+    return false;
 
   return true;
 }
@@ -6254,7 +6334,8 @@ static void riscv_file_end (void)
 
 #undef TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS riscv_setup_incoming_varargs
-
+#undef TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS
+#define TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS riscv_allocate_stack_slots_for_args
 #undef TARGET_STRICT_ARGUMENT_NAMING
 #define TARGET_STRICT_ARGUMENT_NAMING hook_bool_CUMULATIVE_ARGS_true
 
@@ -6379,6 +6460,12 @@ static void riscv_file_end (void)
 
 #undef TARGET_ASM_GLOBALIZE_DECL_NAME
 #define TARGET_ASM_GLOBALIZE_DECL_NAME riscv_globalize_decl_name
+
+#undef TARGET_ATTRIBUTE_TABLE
+#define TARGET_ATTRIBUTE_TABLE riscv_attribute_table
+
+#undef TARGET_WARN_FUNC_RETURN
+#define TARGET_WARN_FUNC_RETURN riscv_warn_func_return
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
