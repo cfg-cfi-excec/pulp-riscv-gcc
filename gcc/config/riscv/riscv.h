@@ -997,8 +997,8 @@ extern bool riscv_slow_unaligned_access;
   (((GLOBAL) ? DW_EH_PE_indirect : 0) | DW_EH_PE_pcrel | DW_EH_PE_sdata4)
 
 #define XLEN_SPEC \
-  "%{march=rv32*:32}" \
-  "%{march=rv64*:64}" \
+  "%{march=rv32*|march=RV32*:32}" \
+  "%{march=rv64*|march=RV64*:64}" \
 
 #define ABI_SPEC \
   "%{mabi=ilp32:ilp32}" \

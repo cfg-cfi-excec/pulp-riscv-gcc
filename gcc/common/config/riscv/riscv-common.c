@@ -47,9 +47,9 @@ riscv_parse_arch_string (const char *isa, int *flags, location_t loc)
 
   if (Pulp_DP_Format == PULP_DP_FORMAT32) *flags |= MASK_MAP_DOUBLE_TO_FLOAT;
 
-  if (strncmp (p, "RV32", 4) == 0)
+  if (strncasecmp(p, "RV32", 4) == 0)
     *flags &= ~MASK_64BIT, p += 4;
-  else if (strncmp (p, "RV64", 4) == 0)
+  else if (strncasecmp(p, "RV64", 4) == 0)
     *flags |= MASK_64BIT, p += 4;
   else if (*p!='I')
     {

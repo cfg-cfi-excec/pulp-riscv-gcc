@@ -158,13 +158,13 @@ static void UpdatePulpChip(struct Pulp_Target_Chip *Pulp_Chip, struct Pulp_Targe
 static enum Pulp_Chip_Type PulpDecodeChip(const char *Text)
 
 {
-        if      (strncmp (Text, "pulpino", 7) == 0) return PULP_CHIP_PULPINO;
-        else if (strncmp (Text, "honey", 5) == 0) return PULP_CHIP_HONEY;
+        if      (strncasecmp(Text, "pulpino", 7) == 0) return PULP_CHIP_PULPINO;
+        else if (strncasecmp(Text, "honey", 5) == 0) return PULP_CHIP_HONEY;
 /* __GAP8 Start */
-        else if (strncmp (Text, "gap8", 4) == 0) return PULP_CHIP_GAP8;
+        else if (strncasecmp(Text, "gap8", 4) == 0) return PULP_CHIP_GAP8;
 /* __GAP8 Stop */
-        else if (strncmp (Text, "gap9", 4) == 0) return PULP_CHIP_GAP9;
-        else if (strncmp (Text, "none", 4) == 0) return PULP_CHIP_NONE;
+        else if (strncasecmp(Text, "gap9", 4) == 0) return PULP_CHIP_GAP9;
+        else if (strncasecmp(Text, "none", 4) == 0) return PULP_CHIP_NONE;
         else return PULP_CHIP_NONE;
 }
 
@@ -175,17 +175,17 @@ static enum Pulp_Processor_Type PulpDecodeCpu(char *Text, int *Len)
 	int i;
 
 	for (i = 0; Dup[i]; i++) Dup[i] = TOLOWER (Dup[i]);
-        if      (strncmp (Dup, "none", 4) == 0)   { free(Dup); if (Len) *Len = 4; return PULP_NONE; }
-        else if (strncmp (Dup, "riscv", 5) == 0)  { free(Dup); if (Len) *Len = 5; return PULP_RISCV; }
-        else if (strncmp (Dup, "pulpv0", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V0; }
-        else if (strncmp (Dup, "pulpv1", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V1; }
-        else if (strncmp (Dup, "pulpv2", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V2; }
-        else if (strncmp (Dup, "pulpv3", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V3; }
+        if      (strncasecmp(Dup, "none", 4) == 0)   { free(Dup); if (Len) *Len = 4; return PULP_NONE; }
+        else if (strncasecmp(Dup, "riscv", 5) == 0)  { free(Dup); if (Len) *Len = 5; return PULP_RISCV; }
+        else if (strncasecmp(Dup, "pulpv0", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V0; }
+        else if (strncasecmp(Dup, "pulpv1", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V1; }
+        else if (strncasecmp(Dup, "pulpv2", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V2; }
+        else if (strncasecmp(Dup, "pulpv3", 6) == 0) { free(Dup); if (Len) *Len = 6; return PULP_V3; }
 /* __GAP8 Start */
-        else if (strncmp (Dup, "gap8", 4) == 0)   { free(Dup); if (Len) *Len = 4; return PULP_GAP8; }
+        else if (strncasecmp(Dup, "gap8", 4) == 0)   { free(Dup); if (Len) *Len = 4; return PULP_GAP8; }
 /* __GAP8 Stop */
-        else if (strncmp (Dup, "gap9", 4) == 0)   { free(Dup); if (Len) *Len = 4; return PULP_GAP9; }
-        else if (strncmp (Dup, "pulpslim", 8) == 0)   { free(Dup); if (Len) *Len = 8; return PULP_SLIM; }
+        else if (strncasecmp(Dup, "gap9", 4) == 0)   { free(Dup); if (Len) *Len = 4; return PULP_GAP9; }
+        else if (strncasecmp(Dup, "pulpslim", 8) == 0)   { free(Dup); if (Len) *Len = 8; return PULP_SLIM; }
         else                                      { free(Dup); if (Len) *Len = 0; return PULP_NONE; }
 }
 
